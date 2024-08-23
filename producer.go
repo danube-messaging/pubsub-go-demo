@@ -6,10 +6,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 
 	"github.com/danrusei/danube-go"
-	"gopkg.in/yaml.v2"
 )
 
 type ProducerConfig struct {
@@ -27,8 +25,13 @@ func startProducer() {
 	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
 	flag.Parse()
 
+	// Validate required flags
 	if *prodConfig == "" {
-		log.Fatal("Producer config file is required")
+		log.Fatalf("Error: Producer config file is required.\nUsage:\n"+
+			"  --server-addr (default: %s) : Address to bind the HTTP server\n"+
+			"  --prod-config (required)    : Producer configuration YAML file\n"+
+			"  --danube-addr (default: %s) : Address of the Danube Broker\n",
+			*serverAddr, *danubeAddr)
 	}
 
 	// Parse producer config
@@ -116,18 +119,5 @@ func createHandler(producers map[string]*danube.Producer, schemaType string) htt
 
 		log.Printf("Message sent by producer %s with ID %v", schemaType, messageID)
 		fmt.Fprintln(w, "Message sent")
-	}
-}
-
-func parseConfig(filename string, config interface{}) {
-	file, err := os.Open(filename)
-	if err != nil {
-		log.Fatalf("Failed to open config file: %v", err)
-	}
-	defer file.Close()
-
-	decoder := yaml.NewDecoder(file)
-	if err := decoder.Decode(config); err != nil {
-		log.Fatalf("Failed to parse config file: %v", err)
 	}
 }

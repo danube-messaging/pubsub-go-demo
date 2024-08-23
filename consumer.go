@@ -23,8 +23,12 @@ func startConsumer() {
 	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
 	flag.Parse()
 
+	// Validate required flags
 	if *consConfig == "" {
-		log.Fatal("Consumer config file is required")
+		log.Fatalf("Error: Consumer config file is required.\nUsage:\n"+
+			"  --cons-config (required)    : Consumer configuration YAML file\n"+
+			"  --danube-addr (default: %s) : Address of the Danube Broker\n",
+			*danubeAddr)
 	}
 
 	// Parse consumer config
