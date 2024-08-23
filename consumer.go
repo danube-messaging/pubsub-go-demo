@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"flag"
 	"log"
 	"strings"
 
@@ -18,18 +17,7 @@ type ConsumerConfig struct {
 	} `yaml:"consumers"`
 }
 
-func startConsumer() {
-	consConfig := flag.String("cons-config", "", "Consumer configuration YAML file")
-	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
-	flag.Parse()
-
-	// Validate required flags
-	if *consConfig == "" {
-		log.Fatalf("Error: Consumer config file is required.\nUsage:\n"+
-			"  --cons-config (required)    : Consumer configuration YAML file\n"+
-			"  --danube-addr (default: %s) : Address of the Danube Broker\n",
-			*danubeAddr)
-	}
+func startConsumer(consConfig *string, danubeAddr *string) {
 
 	// Parse consumer config
 	var config ConsumerConfig

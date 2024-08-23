@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
-	"flag"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/danrusei/danube-go"
 )
@@ -19,21 +21,7 @@ type ProducerConfig struct {
 	} `yaml:"producers"`
 }
 
-func startProducer() {
-	serverAddr := flag.String("server-addr", "0.0.0.0:4040", "Address to bind the HTTP server")
-	prodConfig := flag.String("prod-config", "", "Producer configuration YAML file")
-	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
-	flag.Parse()
-
-	// Validate required flags
-	if *prodConfig == "" {
-		log.Fatalf("Error: Producer config file is required.\nUsage:\n"+
-			"  --server-addr (default: %s) : Address to bind the HTTP server\n"+
-			"  --prod-config (required)    : Producer configuration YAML file\n"+
-			"  --danube-addr (default: %s) : Address of the Danube Broker\n",
-			*serverAddr, *danubeAddr)
-	}
-
+func startProducer(serverAddr *string, prodConfig *string, danubeAddr *string) {
 	// Parse producer config
 	var config ProducerConfig
 	parseConfig(*prodConfig, &config)
@@ -43,11 +31,16 @@ func startProducer() {
 
 	// Start HTTP server
 	mux := http.NewServeMux()
-	mux.HandleFunc("PUT /pubsub/json", createHandler(producers, "json"))
-	mux.HandleFunc("PUT /pubsub/string", createHandler(producers, "string"))
-	mux.HandleFunc("PUT /pubsub/number", createHandler(producers, "number"))
+	mux.HandleFunc("PUT /pubsub/json", createJsonHandler(producers["json"]))
+	mux.HandleFunc("PUT /pubsub/string", createStringHandler(producers["string"]))
+	mux.HandleFunc("PUT /pubsub/number", createNumberHandler(producers["number"]))
 
 	log.Printf("Starting producer HTTP server on %s", *serverAddr)
+	log.Printf("Registered HTTP handlers:\n" +
+		"  PUT /pubsub/json   -> Accept JSON format messages\n" +
+		"  PUT /pubsub/string -> Accept string format messages\n" +
+		"  PUT /pubsub/number -> Accept number format messages\n")
+
 	log.Fatal(http.ListenAndServe(*serverAddr, mux))
 }
 
@@ -95,29 +88,90 @@ func initializeProducers(config ProducerConfig, danubeAddr *string) map[string]*
 	return producers
 }
 
-func createHandler(producers map[string]*danube.Producer, schemaType string) http.HandlerFunc {
+func createJsonHandler(producer *danube.Producer) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+
+		if r.Header.Get("Content-Type") != "application/json" {
+			http.Error(w, "Content-Type must be application/json", http.StatusUnsupportedMediaType)
+			return
+		}
+
 		ctx := context.Background()
-		producer, ok := producers[schemaType]
-		if !ok {
-			http.Error(w, fmt.Sprintf("No producer found for schema type: %s", schemaType), http.StatusBadRequest)
+
+		payload, err := io.ReadAll(r.Body)
+		if err != nil || len(payload) == 0 {
+			http.Error(w, "Failed to read payload or payload is empty", http.StatusBadRequest)
 			return
 		}
 
-		payload := make([]byte, r.ContentLength)
-		_, err := r.Body.Read(payload)
-		if err != nil {
-			http.Error(w, "Failed to read payload", http.StatusInternalServerError)
+		// Validate the JSON format
+		var jsonData map[string]interface{}
+		if err := json.Unmarshal(payload, &jsonData); err != nil {
+			http.Error(w, "Invalid JSON format", http.StatusBadRequest)
 			return
 		}
 
+		// Send the message using the producer
 		messageID, err := producer.Send(ctx, payload, nil)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Failed to send message: %v", err), http.StatusInternalServerError)
 			return
 		}
 
-		log.Printf("Message sent by producer %s with ID %v", schemaType, messageID)
+		log.Printf("JSON Message sent with ID %v", messageID)
+		fmt.Fprintln(w, "Message sent")
+	}
+}
+
+func createStringHandler(producer *danube.Producer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		ctx := context.Background()
+
+		payload, err := io.ReadAll(r.Body)
+		if err != nil || len(payload) == 0 {
+			http.Error(w, "Failed to read payload or payload is empty", http.StatusBadRequest)
+			return
+		}
+
+		// Send the message using the producer
+		messageID, err := producer.Send(ctx, payload, nil)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to send message: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("String Message sent with ID %v", messageID)
+		fmt.Fprintln(w, "Message sent")
+	}
+}
+
+func createNumberHandler(producer *danube.Producer) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+
+		ctx := context.Background()
+
+		payload, err := io.ReadAll(r.Body)
+		if err != nil || len(payload) == 0 {
+			http.Error(w, "Failed to read payload or payload is empty", http.StatusBadRequest)
+			return
+		}
+
+		// Validate that the payload is a number (e.g., integer)
+		numberStr := string(payload)
+		if _, err := strconv.ParseInt(numberStr, 10, 64); err != nil {
+			http.Error(w, "Payload must be a valid number", http.StatusBadRequest)
+			return
+		}
+
+		// Send the message using the producer
+		messageID, err := producer.Send(ctx, payload, nil)
+		if err != nil {
+			http.Error(w, fmt.Sprintf("Failed to send message: %v", err), http.StatusInternalServerError)
+			return
+		}
+
+		log.Printf("Number Message sent with ID %v", messageID)
 		fmt.Fprintln(w, "Message sent")
 	}
 }
