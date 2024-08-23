@@ -20,6 +20,7 @@ type ConsumerConfig struct {
 
 func startConsumer() {
 	consConfig := flag.String("cons-config", "", "Consumer configuration YAML file")
+	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
 	flag.Parse()
 
 	if *consConfig == "" {
@@ -31,11 +32,11 @@ func startConsumer() {
 	parseConfig(*consConfig, &config)
 
 	// Start consumers based on config
-	initializeConsumers(config)
+	initializeConsumers(config, danubeAddr)
 }
 
-func initializeConsumers(config ConsumerConfig) {
-	client := danube.NewClient().ServiceURL("127.0.0.1:6650").Build()
+func initializeConsumers(config ConsumerConfig, danubeAddr *string) {
+	client := danube.NewClient().ServiceURL(*danubeAddr).Build()
 
 	for _, c := range config.Consumers {
 		ctx := context.Background()

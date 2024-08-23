@@ -24,6 +24,7 @@ type ProducerConfig struct {
 func startProducer() {
 	serverAddr := flag.String("server-addr", "0.0.0.0:4040", "Address to bind the HTTP server")
 	prodConfig := flag.String("prod-config", "", "Producer configuration YAML file")
+	danubeAddr := flag.String("danube-addr", "0.0.0.0:6500", "Address of the Danube Broker")
 	flag.Parse()
 
 	if *prodConfig == "" {
@@ -35,7 +36,7 @@ func startProducer() {
 	parseConfig(*prodConfig, &config)
 
 	// Initialize producers based on config
-	producers := initializeProducers(config)
+	producers := initializeProducers(config, danubeAddr)
 
 	// Start HTTP server
 	mux := http.NewServeMux()
@@ -47,9 +48,9 @@ func startProducer() {
 	log.Fatal(http.ListenAndServe(*serverAddr, mux))
 }
 
-func initializeProducers(config ProducerConfig) map[string]*danube.Producer {
+func initializeProducers(config ProducerConfig, danubeAddr *string) map[string]*danube.Producer {
 	producers := make(map[string]*danube.Producer)
-	client := danube.NewClient().ServiceURL("127.0.0.1:6650").Build()
+	client := danube.NewClient().ServiceURL(*danubeAddr).Build()
 
 	for _, p := range config.Producers {
 		ctx := context.Background()
